@@ -1,11 +1,3 @@
--- Projet fil rouge - Ventes Nike
--- Requêtes sur le schéma en étoile
-
--- =============================================================================
--- Jointures, agrégats, sous-requêtes
--- =============================================================================
-
--- 1. Nombre de commandes et CA par ville, uniquement les villes au-delà de 500 000 $
 SELECT g.ville,
        g.pays,
        COUNT(DISTINCT f.commande_id) AS nb_commandes,
@@ -16,20 +8,17 @@ GROUP BY g.ville, g.pays
 HAVING SUM(f.chiffre_affaires) > 500000
 ORDER BY ca DESC;
 
--- 2a. Clients qui n'ont jamais commandé (LEFT JOIN)
 SELECT c.client_id, c.ville_residence, c.date_inscription
 FROM dim_client c
 LEFT JOIN fait_ventes f ON f.client_id = c.client_id
 WHERE f.client_id IS NULL;
 
--- 2b. Clients qui n'ont jamais commandé (NOT EXISTS)
 SELECT c.client_id, c.ville_residence, c.date_inscription
 FROM dim_client c
 WHERE NOT EXISTS (
     SELECT 1 FROM fait_ventes f WHERE f.client_id = c.client_id
 );
 
--- 3. Commandes dont le montant dépasse le montant moyen d'une commande
 SELECT f.commande_id, SUM(f.chiffre_affaires) AS montant_commande
 FROM fait_ventes f
 GROUP BY f.commande_id
@@ -40,13 +29,6 @@ HAVING SUM(f.chiffre_affaires) > (
 )
 ORDER BY montant_commande DESC;
 
--- 4. Liste des catégories de chaque univers (DISTINCT)
-SELECT DISTINCT univers, categorie
-FROM dim_produit
-WHERE niveau = 'Produit'
-ORDER BY univers, categorie;
-
--- 5. CA et bénéfices par zone et par canal de vente
 SELECT g.zone,
        f.canal_vente,
        SUM(f.chiffre_affaires) AS ca,
@@ -56,23 +38,6 @@ JOIN dim_geographie g ON g.geographie_id = f.geographie_id
 GROUP BY g.zone, f.canal_vente
 ORDER BY ca DESC;
 
--- =============================================================================
--- Fonctions de fenêtre
--- =============================================================================
-
--- 6. CA de chaque produit et part du CA de sa catégorie (SUM OVER PARTITION BY)
-SELECT p.categorie,
-       p.nom,
-       SUM(f.chiffre_affaires) AS ca_produit,
-       SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY p.categorie) AS ca_categorie,
-       ROUND(100 * SUM(f.chiffre_affaires)
-             / SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY p.categorie), 1) AS part_pct
-FROM fait_ventes f
-JOIN dim_produit p ON p.produit_id = f.produit_id
-GROUP BY p.categorie, p.nom
-ORDER BY p.categorie, ca_produit DESC;
-
--- 7. Top 3 des produits par catégorie (RANK)
 WITH ventes_produit AS (
     SELECT p.categorie, p.nom, SUM(f.chiffre_affaires) AS ca
     FROM fait_ventes f
@@ -88,7 +53,16 @@ FROM classement
 WHERE rang <= 3
 ORDER BY categorie, rang;
 
--- 8. Évolution du CA mensuel en % par rapport au mois précédent (LAG)
+SELECT p.categorie,
+       p.nom,
+       SUM(f.chiffre_affaires) AS ca_produit,
+       ROUND(100 * SUM(f.chiffre_affaires)
+             / SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY p.categorie), 1) AS part_pct
+FROM fait_ventes f
+JOIN dim_produit p ON p.produit_id = f.produit_id
+GROUP BY p.categorie, p.nom
+ORDER BY p.categorie, ca_produit DESC;
+
 WITH ca_mois AS (
     SELECT d.annee, d.mois, SUM(f.chiffre_affaires) AS ca
     FROM fait_ventes f
@@ -104,19 +78,6 @@ SELECT annee,
 FROM ca_mois
 ORDER BY annee, mois;
 
--- 9. Segmentation des clients en quartiles de CA (NTILE)
-WITH ca_client AS (
-    SELECT client_id, SUM(chiffre_affaires) AS ca
-    FROM fait_ventes
-    GROUP BY client_id
-)
-SELECT client_id,
-       ca,
-       NTILE(4) OVER (ORDER BY ca DESC) AS quartile   -- 1 = les 25 % de clients qui dépensent le plus
-FROM ca_client
-ORDER BY ca DESC;
-
--- 10. Délai moyen (en jours) entre deux commandes d'un même client (LAG)
 WITH commandes AS (
     SELECT DISTINCT f.client_id, f.commande_id, d.date_complete
     FROM fait_ventes f
@@ -131,42 +92,57 @@ SELECT ROUND(AVG(jours), 1) AS delai_moyen_jours
 FROM ecarts
 WHERE jours IS NOT NULL;
 
--- 11. CA cumulé depuis le début de l'année, mois par mois
+WITH ca_client AS (
+    SELECT client_id, SUM(chiffre_affaires) AS ca
+    FROM fait_ventes
+    GROUP BY client_id
+)
+SELECT client_id,
+       ca,
+       NTILE(4) OVER (ORDER BY ca DESC) AS quartile
+FROM ca_client
+ORDER BY ca DESC;
+
+WITH ca_jour AS (
+    SELECT d.date_complete, SUM(f.chiffre_affaires) AS ca
+    FROM fait_ventes f
+    JOIN dim_date d ON d.date_id = f.date_id
+    GROUP BY d.date_complete
+)
+SELECT date_complete,
+       ca,
+       ROUND(AVG(ca) OVER (ORDER BY date_complete ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS moyenne_7_jours
+FROM ca_jour
+ORDER BY date_complete;
+
 SELECT d.annee,
        d.mois,
        SUM(f.chiffre_affaires) AS ca_mois,
-       SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY d.annee ORDER BY d.mois) AS ca_cumule
+       SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY d.annee ORDER BY d.mois
+                                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ca_cumule
 FROM fait_ventes f
 JOIN dim_date d ON d.date_id = f.date_id
 GROUP BY d.annee, d.mois
 ORDER BY d.annee, d.mois;
 
--- =============================================================================
--- CTE récursive
--- =============================================================================
-
--- 12. Chemin complet de chaque produit dans le catalogue (Nike > univers > catégorie > produit)
 WITH RECURSIVE arbre AS (
-    -- 1. ancre : la racine
     SELECT produit_id, nom, niveau, parent_id,
            0 AS profondeur,
            nom::text AS chemin
     FROM dim_produit
     WHERE parent_id IS NULL
     UNION ALL
-    -- 2. partie récursive : les enfants de chaque ligne trouvée
     SELECT p.produit_id, p.nom, p.niveau, p.parent_id,
            a.profondeur + 1,
            a.chemin || ' > ' || p.nom
     FROM dim_produit p
     JOIN arbre a ON p.parent_id = a.produit_id
-    WHERE a.profondeur < 10                              -- 3. garde-fou
+    WHERE a.profondeur < 10
 )
 SELECT chemin, profondeur
 FROM arbre
 ORDER BY chemin;
 
--- 13. CA de chaque produit avec son chemin dans le catalogue
 WITH RECURSIVE arbre AS (
     SELECT produit_id, nom, niveau, nom::text AS chemin
     FROM dim_produit
@@ -182,3 +158,31 @@ JOIN fait_ventes f ON f.produit_id = a.produit_id
 WHERE a.niveau = 'Produit'
 GROUP BY a.chemin
 ORDER BY ca DESC;
+
+WITH ventes_semestre AS (
+    SELECT g.zone, g.pays, d.annee, f.chiffre_affaires
+    FROM fait_ventes f
+    JOIN dim_date d       ON d.date_id       = f.date_id
+    JOIN dim_geographie g ON g.geographie_id = f.geographie_id
+    WHERE d.mois BETWEEN 1 AND 6
+      AND d.annee IN (2024, 2025)
+),
+ca_pays AS (
+    SELECT zone, pays,
+           SUM(CASE WHEN annee = 2024 THEN chiffre_affaires ELSE 0 END) AS ca_2024,
+           SUM(CASE WHEN annee = 2025 THEN chiffre_affaires ELSE 0 END) AS ca_2025
+    FROM ventes_semestre
+    GROUP BY zone, pays
+),
+evolution AS (
+    SELECT *, ROUND(100 * (ca_2025 - ca_2024) / ca_2024, 1) AS evolution_pct
+    FROM ca_pays
+),
+classement AS (
+    SELECT *, RANK() OVER (PARTITION BY zone ORDER BY evolution_pct DESC) AS rang
+    FROM evolution
+)
+SELECT zone, pays, ca_2024, ca_2025, evolution_pct
+FROM classement
+WHERE rang = 1
+ORDER BY zone;
