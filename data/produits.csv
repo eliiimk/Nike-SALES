@@ -1,0 +1,21 @@
+produit_id,nom_produit,categorie_id,prix_catalogue
+101,React Infinity,1,7495
+102,Air Zoom,1,6995
+103,Free RN,1,5495
+104,Pegasus Turbo,1,9995
+105,Air Jordan,2,9995
+106,Kyrie Flytrap,2,4995
+107,Zoom Freak,2,6495
+108,LeBron 20,2,8995
+109,Tiempo Legend,3,6995
+110,Premier III,3,3995
+111,Mercurial Superfly,3,9495
+112,Phantom GT,3,7995
+113,SuperRep Go,4,4495
+114,Flex Trainer,4,2995
+115,Metcon 7,4,6995
+116,ZoomX Invincible,4,8495
+117,Blazer Mid,5,5995
+118,Waffle One,5,4995
+119,Dunk Low,5,7495
+120,Air Force 1,5,6995
