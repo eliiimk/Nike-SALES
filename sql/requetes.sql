@@ -43,6 +43,7 @@ ORDER BY montant_commande DESC;
 -- 4. Liste des catégories de chaque univers (DISTINCT)
 SELECT DISTINCT univers, categorie
 FROM dim_produit
+WHERE niveau = 'Produit'
 ORDER BY univers, categorie;
 
 -- 5. CA et bénéfices par zone et par canal de vente
@@ -61,28 +62,28 @@ ORDER BY ca DESC;
 
 -- 6. CA de chaque produit et part du CA de sa catégorie (SUM OVER PARTITION BY)
 SELECT p.categorie,
-       p.nom_produit,
+       p.nom,
        SUM(f.chiffre_affaires) AS ca_produit,
        SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY p.categorie) AS ca_categorie,
        ROUND(100 * SUM(f.chiffre_affaires)
              / SUM(SUM(f.chiffre_affaires)) OVER (PARTITION BY p.categorie), 1) AS part_pct
 FROM fait_ventes f
 JOIN dim_produit p ON p.produit_id = f.produit_id
-GROUP BY p.categorie, p.nom_produit
+GROUP BY p.categorie, p.nom
 ORDER BY p.categorie, ca_produit DESC;
 
 -- 7. Top 3 des produits par catégorie (RANK)
 WITH ventes_produit AS (
-    SELECT p.categorie, p.nom_produit, SUM(f.chiffre_affaires) AS ca
+    SELECT p.categorie, p.nom, SUM(f.chiffre_affaires) AS ca
     FROM fait_ventes f
     JOIN dim_produit p ON p.produit_id = f.produit_id
-    GROUP BY p.categorie, p.nom_produit
+    GROUP BY p.categorie, p.nom
 ),
 classement AS (
     SELECT *, RANK() OVER (PARTITION BY categorie ORDER BY ca DESC) AS rang
     FROM ventes_produit
 )
-SELECT categorie, nom_produit, ca, rang
+SELECT categorie, nom, ca, rang
 FROM classement
 WHERE rang <= 3
 ORDER BY categorie, rang;
@@ -146,17 +147,38 @@ ORDER BY d.annee, d.mois;
 
 -- 12. Chemin complet de chaque produit dans le catalogue (Nike > univers > catégorie > produit)
 WITH RECURSIVE arbre AS (
-    SELECT categorie_id, nom_categorie, niveau, 0 AS profondeur,
-           nom_categorie::text AS chemin
-    FROM categories
-    WHERE categorie_parent_id IS NULL                    -- point de départ : Nike
+    -- 1. ancre : la racine
+    SELECT produit_id, nom, niveau, parent_id,
+           0 AS profondeur,
+           nom::text AS chemin
+    FROM dim_produit
+    WHERE parent_id IS NULL
     UNION ALL
-    SELECT c.categorie_id, c.nom_categorie, c.niveau, a.profondeur + 1,
-           a.chemin || ' > ' || c.nom_categorie
-    FROM categories c
-    JOIN arbre a ON c.categorie_parent_id = a.categorie_id
+    -- 2. partie récursive : les enfants de chaque ligne trouvée
+    SELECT p.produit_id, p.nom, p.niveau, p.parent_id,
+           a.profondeur + 1,
+           a.chemin || ' > ' || p.nom
+    FROM dim_produit p
+    JOIN arbre a ON p.parent_id = a.produit_id
+    WHERE a.profondeur < 10                              -- 3. garde-fou
 )
 SELECT chemin, profondeur
 FROM arbre
-WHERE niveau = 'Produit'
 ORDER BY chemin;
+
+-- 13. CA de chaque produit avec son chemin dans le catalogue
+WITH RECURSIVE arbre AS (
+    SELECT produit_id, nom, niveau, nom::text AS chemin
+    FROM dim_produit
+    WHERE parent_id IS NULL
+    UNION ALL
+    SELECT p.produit_id, p.nom, p.niveau, a.chemin || ' > ' || p.nom
+    FROM dim_produit p
+    JOIN arbre a ON p.parent_id = a.produit_id
+)
+SELECT a.chemin, SUM(f.chiffre_affaires) AS ca
+FROM arbre a
+JOIN fait_ventes f ON f.produit_id = a.produit_id
+WHERE a.niveau = 'Produit'
+GROUP BY a.chemin
+ORDER BY ca DESC;

@@ -30,13 +30,16 @@ CREATE TABLE dim_client (
     date_inscription DATE NOT NULL
 );
 
--- Dimension produits (catégorie et univers regroupés dans la même table)
+-- Dimension produits, avec la hiérarchie du catalogue : Nike > univers > catégorie > produit
+-- Chaque ligne pointe vers son parent (parent_id). Les ventes ne concernent que les lignes de niveau 'Produit'.
 CREATE TABLE dim_produit (
     produit_id     INTEGER PRIMARY KEY,
-    nom_produit    VARCHAR(100) NOT NULL UNIQUE,
-    categorie      VARCHAR(50) NOT NULL,
-    univers        VARCHAR(50) NOT NULL,
-    prix_catalogue NUMERIC(10, 2) NOT NULL CHECK (prix_catalogue > 0)
+    nom            VARCHAR(100) NOT NULL UNIQUE,
+    niveau         VARCHAR(20) NOT NULL CHECK (niveau IN ('Marque', 'Univers', 'Catégorie', 'Produit')),
+    parent_id      INTEGER REFERENCES dim_produit (produit_id),
+    categorie      VARCHAR(50),
+    univers        VARCHAR(50),
+    prix_catalogue NUMERIC(10, 2) CHECK (prix_catalogue > 0)
 );
 
 -- Dimension géographie (ville, pays et zone regroupés dans la même table)
@@ -66,17 +69,8 @@ CREATE TABLE fait_ventes (
     benefices        NUMERIC(12, 2) NOT NULL
 );
 
--- Hiérarchie du catalogue (Nike > univers > catégorie > produit), utilisée pour la CTE récursive
-CREATE TABLE categories (
-    categorie_id        INTEGER PRIMARY KEY,
-    nom_categorie       VARCHAR(100) NOT NULL,
-    categorie_parent_id INTEGER REFERENCES categories (categorie_id),
-    niveau              VARCHAR(20) NOT NULL
-);
-
 \copy dim_date       FROM 'data/dim_date.csv'       WITH (FORMAT csv, HEADER true)
 \copy dim_client     FROM 'data/dim_client.csv'     WITH (FORMAT csv, HEADER true)
 \copy dim_produit    FROM 'data/dim_produit.csv'    WITH (FORMAT csv, HEADER true)
 \copy dim_geographie FROM 'data/dim_geographie.csv' WITH (FORMAT csv, HEADER true)
-\copy categories     FROM 'data/categories.csv'     WITH (FORMAT csv, HEADER true)
 \copy fait_ventes    FROM 'data/fait_ventes.csv'    WITH (FORMAT csv, HEADER true)
