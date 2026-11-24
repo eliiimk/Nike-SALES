@@ -1,11 +1,24 @@
 -- Projet fil rouge - Ventes Nike
 -- Création des tables et import des données (PostgreSQL)
+-- Montants en dollars (USD). Lancer depuis la racine du dépôt : psql -d nike -f sql/creation_tables.sql
 
-DROP TABLE IF EXISTS lignes_commande, commandes, produits, categories_produits, univers, regions;
+DROP TABLE IF EXISTS lignes_commande, commandes, produits, categories_produits, univers, regions, pays, zones;
+
+CREATE TABLE zones (
+    zone_id  INTEGER PRIMARY KEY,
+    nom_zone VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE pays (
+    pays_id  INTEGER PRIMARY KEY,
+    nom_pays VARCHAR(50) NOT NULL UNIQUE,
+    zone_id  INTEGER NOT NULL REFERENCES zones (zone_id)
+);
 
 CREATE TABLE regions (
-    region_id   INTEGER PRIMARY KEY,
-    region_nom  VARCHAR(50) NOT NULL UNIQUE
+    region_id  INTEGER PRIMARY KEY,
+    region_nom VARCHAR(50) NOT NULL UNIQUE,
+    pays_id    INTEGER NOT NULL REFERENCES pays (pays_id)
 );
 
 CREATE TABLE univers (
@@ -28,7 +41,7 @@ CREATE TABLE produits (
 
 CREATE TABLE commandes (
     commande_id     INTEGER PRIMARY KEY,
-    order_id_source INTEGER NOT NULL,
+    order_id_source INTEGER,
     date_commande   DATE NOT NULL,
     canal_vente     VARCHAR(10) NOT NULL CHECK (canal_vente IN ('Online', 'Retail')),
     region_id       INTEGER NOT NULL REFERENCES regions (region_id)
@@ -47,6 +60,8 @@ CREATE TABLE lignes_commande (
     benefices        NUMERIC(12, 2) NOT NULL
 );
 
+\copy zones               FROM 'data/zones.csv'               WITH (FORMAT csv, HEADER true)
+\copy pays                FROM 'data/pays.csv'                WITH (FORMAT csv, HEADER true)
 \copy regions             FROM 'data/regions.csv'             WITH (FORMAT csv, HEADER true)
 \copy univers             FROM 'data/univers.csv'             WITH (FORMAT csv, HEADER true)
 \copy categories_produits FROM 'data/categories_produits.csv' WITH (FORMAT csv, HEADER true)
