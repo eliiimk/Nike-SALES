@@ -182,3 +182,14 @@ JOIN fait_ventes f ON f.produit_id = a.produit_id
 WHERE a.niveau = 'Produit'
 GROUP BY a.chemin
 ORDER BY ca DESC;
+
+-- Comparer le chiffre d'affaires de chaque vente à la vente précédente du même produit.
+SELECT
+    client_id,
+    date_id,
+    quantite_vendue,
+    LAG(quantite_vendue) OVER (
+        PARTITION BY client_id
+        ORDER BY date_id
+    ) AS quantite_precedente
+FROM fait_ventes;
