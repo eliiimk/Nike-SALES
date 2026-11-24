@@ -1,0 +1,48 @@
+geographie_id,ville,pays,zone
+1,New York,États-Unis,North America
+2,Los Angeles,États-Unis,North America
+3,Chicago,États-Unis,North America
+4,Houston,États-Unis,North America
+5,Miami,États-Unis,North America
+6,Toronto,Canada,North America
+7,Montréal,Canada,North America
+8,Vancouver,Canada,North America
+9,Londres,Royaume-Uni,EMEA
+10,Manchester,Royaume-Uni,EMEA
+11,Berlin,Allemagne,EMEA
+12,Munich,Allemagne,EMEA
+13,Hambourg,Allemagne,EMEA
+14,Paris,France,EMEA
+15,Lyon,France,EMEA
+16,Marseille,France,EMEA
+17,Toulouse,France,EMEA
+18,Madrid,Espagne,EMEA
+19,Barcelone,Espagne,EMEA
+20,Milan,Italie,EMEA
+21,Rome,Italie,EMEA
+22,Amsterdam,Pays-Bas,EMEA
+23,Rotterdam,Pays-Bas,EMEA
+24,Dubaï,Émirats arabes unis,EMEA
+25,Abou Dabi,Émirats arabes unis,EMEA
+26,Johannesburg,Afrique du Sud,EMEA
+27,Le Cap,Afrique du Sud,EMEA
+28,Shanghai,Chine,Greater China
+29,Pékin,Chine,Greater China
+30,Shenzhen,Chine,Greater China
+31,Canton,Chine,Greater China
+32,Tokyo,Japon,APLA
+33,Osaka,Japon,APLA
+34,Séoul,Corée du Sud,APLA
+35,Busan,Corée du Sud,APLA
+36,Sydney,Australie,APLA
+37,Melbourne,Australie,APLA
+38,Mexico,Mexique,APLA
+39,Guadalajara,Mexique,APLA
+40,São Paulo,Brésil,APLA
+41,Rio de Janeiro,Brésil,APLA
+42,Delhi,Inde,APLA
+43,Mumbai,Inde,APLA
+44,Pune,Inde,APLA
+45,Bangalore,Inde,APLA
+46,Hyderabad,Inde,APLA
+47,Kolkata,Inde,APLA

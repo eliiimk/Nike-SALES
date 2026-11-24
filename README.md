@@ -9,18 +9,31 @@ Analyse des ventes Nike dans le monde entre juillet 2023 et juillet 2025 (Postgr
 - Source : [Nike Sales Dataset – Kaggle](https://www.kaggle.com/datasets/nayakganesh007/nike-sales-uncleaned-dataset), licence CC0, données fictives (2 500 commandes en Inde).
 - Nous avons nettoyé ce fichier puis ajouté des commandes sur les autres marchés de Nike. La répartition suit les résultats publiés par Nike pour l'exercice 2025 (North America ~44 %, EMEA ~27 %, Greater China ~15 %, APLA ~14 %).
 - Les montants sont en dollars (USD).
-- Dans `commandes`, `order_id_source` est renseigné pour les commandes venant du fichier Kaggle et vide pour les commandes ajoutées.
+- Dans `fait_ventes`, `order_id_source` est renseigné pour les ventes venant du fichier Kaggle et vide pour les ventes ajoutées.
+
+## Modèle : schéma en étoile
+
+![Schéma en étoile](docs/schema_etoile.png)
+
+| Table | Rôle | Lignes |
+|---|---|---|
+| `fait_ventes` | Table de faits : une ligne = un produit vendu dans une commande | 147 588 |
+| `dim_date` | Calendrier (année, trimestre, mois, jour, week-end) | 762 |
+| `dim_client` | Clients (sexe, tranche d'âge, ville, membre Nike, date d'inscription) | 25 000 |
+| `dim_produit` | Produits avec leur catégorie et leur univers | 20 |
+| `dim_geographie` | Villes avec leur pays et leur zone Nike | 47 |
+| `categories` | Hiérarchie du catalogue (Nike > univers > catégorie > produit), utilisée pour la CTE récursive | 28 |
 
 ## Contenu du dépôt
 
 | Dossier / fichier | Contenu |
 |---|---|
-| `sql/creation_tables.sql` | Création des 8 tables (PK, FK, contraintes) et import des CSV |
-| `sql/requetes.sql` | Requêtes de jointure et d'agrégat |
+| `sql/creation_tables.sql` | Création des tables (PK, FK, contraintes) et import des CSV |
+| `sql/requetes.sql` | Requêtes : jointures, agrégats, sous-requêtes, fonctions de fenêtre, CTE récursive |
 | `data/` | Données au format CSV |
 | `source_kaggle/` | Commandes Kaggle nettoyées, utilisées par le script de génération |
 | `generer_donnees.py` | Script qui génère les données de `data/` |
-| `docs/schema_relationnel.png` | Schéma relationnel |
+| `docs/` | Schéma |
 
 ## Créer la base
 
@@ -33,7 +46,7 @@ psql -d nike -f sql/creation_tables.sql
 
 ```bash
 pip install pandas numpy
-python generer_donnees.py --commandes 6900000 --out data_10M   # environ 10 millions de lignes
+python generer_donnees.py --commandes 6900000 --out data_10M   # environ 10 millions de ventes
 ```
 
 Le dossier `data_10M/` n'est pas envoyé sur GitHub (fichiers trop lourds). Pour charger ces données, remplacer `data/` par `data_10M/` dans `sql/creation_tables.sql`.

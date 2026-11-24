@@ -1,0 +1,21 @@
+produit_id,nom_produit,categorie,univers,prix_catalogue
+101,React Infinity,Running,Performance,160
+102,Air Zoom,Running,Performance,130
+103,Free RN,Running,Performance,100
+104,Pegasus Turbo,Running,Performance,180
+105,Air Jordan,Basketball,Performance,180
+106,Kyrie Flytrap,Basketball,Performance,85
+107,Zoom Freak,Basketball,Performance,120
+108,LeBron 20,Basketball,Performance,200
+109,Tiempo Legend,Soccer,Performance,230
+110,Premier III,Soccer,Performance,100
+111,Mercurial Superfly,Soccer,Performance,285
+112,Phantom GT,Soccer,Performance,250
+113,SuperRep Go,Training,Performance,100
+114,Flex Trainer,Training,Performance,70
+115,Metcon 7,Training,Performance,130
+116,ZoomX Invincible,Training,Performance,180
+117,Blazer Mid,Lifestyle,Sportswear,105
+118,Waffle One,Lifestyle,Sportswear,100
+119,Dunk Low,Lifestyle,Sportswear,115
+120,Air Force 1,Lifestyle,Sportswear,115

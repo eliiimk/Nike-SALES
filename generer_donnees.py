@@ -1,15 +1,18 @@
 """
-Génère les données du projet fil rouge (ventes Nike, données fictives).
+Génère les données du projet fil rouge (ventes Nike, données fictives) en schéma en étoile.
 
-- Les 2 500 commandes du dataset Kaggle (Inde, nettoyées) sont conservées.
-- Des commandes sont ajoutées sur les autres marchés de Nike, avec une répartition
-  proche des chiffres réels de l'exercice 2025 (North America 44 %, EMEA 27 %,
-  Greater China 15 %, APLA 14 %).
+Table de faits : fait_ventes (une ligne = un produit vendu dans une commande)
+Dimensions     : dim_date, dim_client, dim_produit, dim_geographie
+Table annexe   : categories (hiérarchie catalogue, pour la CTE récursive)
+
+- Les 2 500 commandes du dataset Kaggle (Inde, nettoyées) sont conservées (order_id_source renseigné).
+- Des commandes sont ajoutées sur les autres marchés de Nike, avec une répartition proche des
+  résultats de l'exercice 2025 (North America 44 %, EMEA 27 %, Greater China 15 %, APLA 14 %).
 - Tous les montants sont en dollars (USD).
 
 Usage :
-    python generer_donnees.py                       # 100 000 commandes (~145 000 lignes)
-    python generer_donnees.py --commandes 6900000   # ~10 millions de lignes (TD performance)
+    python generer_donnees.py                       # 100 000 commandes ajoutées (~150 000 ventes)
+    python generer_donnees.py --commandes 6900000 --out data_10M   # ~10 millions de ventes
 """
 import argparse
 import os
@@ -59,25 +62,87 @@ PRODUITS = [
 TAILLES = {"Men": [str(t) for t in range(7, 14)], "Women": [str(t) for t in range(5, 12)], "Kids": [str(t) for t in range(1, 8)]}
 
 
-def referentiels():
-    zones = pd.DataFrame([(z, n) for z, n, _ in ZONES], columns=["zone_id", "nom_zone"])
-    pays, regions = [], []
-    rid = 1
-    for pid, (nom, zone, *_ , villes) in enumerate(PAYS, start=1):
-        pays.append((pid, nom, zone))
-        for v, _ in villes:
-            regions.append((rid, v, pid))
-            rid += 1
-    pays = pd.DataFrame(pays, columns=["pays_id", "nom_pays", "zone_id"])
-    regions = pd.DataFrame(regions, columns=["region_id", "region_nom", "pays_id"])
-    univers = pd.DataFrame(UNIVERS, columns=["univers_id", "nom_univers"])
-    categories = pd.DataFrame(CATEGORIES, columns=["categorie_id", "nom_categorie", "univers_id"])
-    produits = pd.DataFrame([p[:4] for p in PRODUITS], columns=["produit_id", "nom_produit", "categorie_id", "prix_catalogue"])
-    return zones, pays, regions, univers, categories, produits
+NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
+             "septembre", "octobre", "novembre", "décembre"]
+NOMS_JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 
 
-def poids_villes(regions):
-    """Probabilité de chaque ville = part de la zone x part du pays x poids de la ville."""
+# ---------------------------------------------------------------------------
+# Dimensions
+# ---------------------------------------------------------------------------
+def dim_geographie():
+    zones = {z: n for z, n, _ in ZONES}
+    rows, gid = [], 1
+    for nom_pays, zone, *_, villes in PAYS:
+        for ville, _ in villes:
+            rows.append((gid, ville, nom_pays, zones[zone]))
+            gid += 1
+    return pd.DataFrame(rows, columns=["geographie_id", "ville", "pays", "zone"])
+
+
+def dim_produit():
+    cat = {c: (n, u) for c, n, u in CATEGORIES}
+    univ = dict(UNIVERS)
+    return pd.DataFrame(
+        [(p, nom, cat[c][0], univ[cat[c][1]], prix) for p, nom, c, prix, _ in PRODUITS],
+        columns=["produit_id", "nom_produit", "categorie", "univers", "prix_catalogue"])
+
+
+def table_categories():
+    """Hiérarchie du catalogue : Nike > univers > catégorie > produit (auto-référence)."""
+    rows = [(1, "Nike", None, "Marque")]
+    ids = {}
+    for u, nom in UNIVERS:
+        ids[("u", u)] = 10 + u
+        rows.append((10 + u, nom, 1, "Univers"))
+    for c, nom, u in CATEGORIES:
+        ids[("c", c)] = 100 + c
+        rows.append((100 + c, nom, ids[("u", u)], "Catégorie"))
+    for p, nom, c, *_ in PRODUITS:
+        rows.append((1000 + p, nom, ids[("c", c)], "Produit"))
+    df = pd.DataFrame(rows, columns=["categorie_id", "nom_categorie", "categorie_parent_id", "niveau"])
+    df["categorie_parent_id"] = df["categorie_parent_id"].astype("Int64")
+    return df
+
+
+def dim_date():
+    jours = pd.date_range("2023-07-01", "2025-07-31", freq="D")
+    return pd.DataFrame({
+        "date_id": jours.strftime("%Y%m%d").astype(int),
+        "date_complete": jours.date,
+        "annee": jours.year,
+        "trimestre": jours.quarter,
+        "mois": jours.month,
+        "nom_mois": [NOMS_MOIS[m - 1] for m in jours.month],
+        "semaine": jours.isocalendar().week.to_numpy(),
+        "jour_semaine": jours.dayofweek + 1,
+        "nom_jour": [NOMS_JOURS[d] for d in jours.dayofweek],
+        "est_weekend": jours.dayofweek >= 5,
+    })
+
+
+def dim_client(n, geo, rng):
+    """Clients rattachés à une ville de résidence. _w (fréquence d'achat) n'est pas exporté."""
+    w_ville = poids_villes()
+    ville = rng.choice(len(geo), n, p=w_ville)
+    age = rng.choice(["18-24", "25-34", "35-44", "45-54", "55+"], n, p=[0.24, 0.31, 0.21, 0.14, 0.10])
+    df = pd.DataFrame({
+        "client_id": np.arange(1, n + 1),
+        "sexe": rng.choice(["H", "F"], n, p=[0.55, 0.45]),
+        "tranche_age": age,
+        "ville_residence": geo["ville"].to_numpy()[ville],
+        "pays_residence": geo["pays"].to_numpy()[ville],
+        "membre_nike": rng.random(n) < 0.6,
+        "date_inscription": pd.NaT,
+        "_geo": geo["geographie_id"].to_numpy()[ville],
+        "_w": np.minimum(rng.pareto(2.0, n) + 1, 8),
+    })
+    span = (DATE_MAX - DATE_MIN).days + 1500
+    df["date_inscription"] = DATE_MAX - pd.to_timedelta(rng.integers(0, span, n), unit="D")
+    return df
+
+
+def poids_villes():
     zone_part = {z: p for z, _, p in ZONES}
     w = []
     for nom, zone, part_pays, _, _, villes in PAYS:
@@ -99,79 +164,101 @@ def poids_dates():
     return jours, w / w.sum()
 
 
-def source_kaggle(dossier_source, regions, produits, rng):
-    """Commandes Kaggle déjà nettoyées (Inde) : montants convertis en USD, tailles en pointures."""
-    c = pd.read_csv(os.path.join(dossier_source, "commandes.csv"))
-    l = pd.read_csv(os.path.join(dossier_source, "lignes_commande.csv"))
-    anciennes = pd.read_csv(os.path.join(dossier_source, "regions.csv"))
-    nom_ville = c["region_id"].map(dict(zip(anciennes["region_id"], anciennes["region_nom"])))
-    c["region_id"] = nom_ville.map(dict(zip(regions["region_nom"], regions["region_id"])))
-    # Les prix d'origine sont tirés au hasard (sans lien avec le produit) : on applique le prix
-    # catalogue en USD avec l'indice de prix de l'Inde, et on plafonne les remises à 50 %
-    prix = l["produit_id"].map(dict(zip(produits["produit_id"], produits["prix_catalogue"])))
-    l["prix_unitaire"] = (prix * 0.85).round(2)
-    l["remise"] = l["remise"].clip(upper=0.5)
-    # Le fichier d'origine mélange tailles de vêtements (M/L/XL) et pointures : on garde des pointures
-    pas_pointure = ~l["taille"].astype(str).str.isdigit()
-    l.loc[pas_pointure, "taille"] = [rng.choice(TAILLES[g]) for g in l.loc[pas_pointure, "genre_cible"]]
-    return c, l
+def infos_pays(geo):
+    """Indice de prix et part du web pour chaque geographie_id."""
+    par_pays = {nom: (prix, web) for nom, _, _, prix, web, _ in PAYS}
+    prix = geo["pays"].map(lambda p: par_pays[p][0]).to_numpy()
+    web = geo["pays"].map(lambda p: par_pays[p][1]).to_numpy()
+    return prix, web
 
 
-def generer(debut_cmd, debut_ligne, n, regions, produits, rng):
-    jours, wj = poids_dates()
-    dates = jours[rng.choice(len(jours), n, p=wj)]
-    villes = rng.choice(regions["region_id"].to_numpy(), n, p=poids_villes(regions))
+def choisir_clients(geo_cmd, clients, rng):
+    """Un client de la ville de la commande, les plus fidèles achetant plus souvent."""
+    out = np.empty(len(geo_cmd), dtype=np.int64)
+    for g, grp in clients.groupby("_geo"):
+        m = geo_cmd == g
+        if m.any():
+            w = grp["_w"].to_numpy()
+            out[m] = rng.choice(grp["client_id"].to_numpy(), m.sum(), p=w / w.sum())
+    return out
 
-    pays_de_ville = regions.set_index("region_id")["pays_id"]
-    infos = {i + 1: (p[3], p[4]) for i, p in enumerate(PAYS)}
-    pays = pays_de_ville.loc[villes].to_numpy()
-    part_web = np.array([infos[p][1] for p in pays])
-    indice_prix = np.array([infos[p][0] for p in pays])
-    canal = np.where(rng.random(n) < part_web, "Online", "Retail")
 
-    cmd = pd.DataFrame({
-        "commande_id": np.arange(debut_cmd, debut_cmd + n),
-        "order_id_source": pd.array([pd.NA] * n, dtype="Int64"),
-        "date_commande": dates.date,
-        "canal_vente": canal,
-        "region_id": villes,
+# ---------------------------------------------------------------------------
+# Faits
+# ---------------------------------------------------------------------------
+def ventes_kaggle(dossier, geo, clients, rng):
+    """Commandes Kaggle nettoyées (Inde) : prix catalogue USD (indice Inde), remises plafonnées à 50 %,
+    tailles converties en pointures."""
+    c = pd.read_csv(os.path.join(dossier, "commandes.csv"))
+    l = pd.read_csv(os.path.join(dossier, "lignes_commande.csv"))
+    anciennes = pd.read_csv(os.path.join(dossier, "regions.csv"))
+    ville = c["region_id"].map(dict(zip(anciennes["region_id"], anciennes["region_nom"])))
+    c["geographie_id"] = ville.map(dict(zip(geo["ville"], geo["geographie_id"])))
+    c["client_id"] = choisir_clients(c["geographie_id"].to_numpy(), clients, rng)
+    f = l.merge(c, on="commande_id")
+    prix = f["produit_id"].map({p[0]: p[3] for p in PRODUITS})
+    pas_pointure = ~f["taille"].astype(str).str.isdigit()
+    f.loc[pas_pointure, "taille"] = [rng.choice(TAILLES[g]) for g in f.loc[pas_pointure, "genre_cible"]]
+    return pd.DataFrame({
+        "commande_id": f["commande_id"],
+        "order_id_source": f["order_id_source"].astype("Int64"),
+        "date_id": pd.to_datetime(f["date_commande"]).dt.strftime("%Y%m%d").astype(int),
+        "client_id": f["client_id"],
+        "produit_id": f["produit_id"],
+        "geographie_id": f["geographie_id"],
+        "canal_vente": f["canal_vente"],
+        "genre_cible": f["genre_cible"],
+        "taille": f["taille"].astype(str),
+        "quantite_vendue": f["quantite_vendue"],
+        "prix_unitaire": (prix * 0.85).round(2),
+        "remise": f["remise"].clip(upper=0.5),
     })
 
+
+def ventes_synthetiques(debut_cmd, n, geo, clients, rng):
+    jours, wj = poids_dates()
+    dates = jours[rng.choice(len(jours), n, p=wj)]
+    gidx = rng.choice(len(geo), n, p=poids_villes())
+    geo_id = geo["geographie_id"].to_numpy()[gidx]
+    indice_prix, part_web = infos_pays(geo)
+    canal = np.where(rng.random(n) < part_web[gidx], "Online", "Retail")
+    client = choisir_clients(geo_id, clients, rng)
+    cmd = np.arange(debut_cmd, debut_cmd + n)
+
     nb = rng.choice([1, 2, 3], n, p=[0.65, 0.25, 0.10])
-    m = int(nb.sum())
-    idx_cmd = np.repeat(np.arange(n), nb)
+    i = np.repeat(np.arange(n), nb)
+    m = len(i)
     pop = np.array([p[4] for p in PRODUITS])
     pidx = rng.choice(len(PRODUITS), m, p=pop / pop.sum())
-    prix = np.array([p[3] for p in PRODUITS])[pidx] * indice_prix[idx_cmd]
-    # Soldes plus fréquentes en janvier et en été, Black Friday en novembre
-    mois = pd.DatetimeIndex(dates).month.to_numpy()[idx_cmd]
+    mois = pd.DatetimeIndex(dates).month.to_numpy()[i]
     proba_remise = np.select([mois == 11, np.isin(mois, [1, 7])], [0.45, 0.40], 0.18)
-    remise = np.where(rng.random(m) < proba_remise, rng.choice([0.10, 0.15, 0.20, 0.25, 0.30, 0.40], m), 0.0)
     genre = rng.choice(["Men", "Women", "Kids"], m, p=[0.47, 0.35, 0.18])
     taille = np.empty(m, dtype=object)
-    for g, tailles in TAILLES.items():
+    for g, t in TAILLES.items():
         k = genre == g
-        taille[k] = rng.choice(tailles, k.sum())
-
-    lignes = pd.DataFrame({
-        "ligne_id": np.arange(debut_ligne, debut_ligne + m),
-        "commande_id": cmd["commande_id"].to_numpy()[idx_cmd],
+        taille[k] = rng.choice(t, k.sum())
+    return pd.DataFrame({
+        "commande_id": cmd[i],
+        "order_id_source": pd.array([pd.NA] * m, dtype="Int64"),
+        "date_id": pd.DatetimeIndex(dates).strftime("%Y%m%d").astype(int).to_numpy()[i],
+        "client_id": client[i],
         "produit_id": np.array([p[0] for p in PRODUITS])[pidx],
+        "geographie_id": geo_id[i],
+        "canal_vente": canal[i],
         "genre_cible": genre,
         "taille": taille,
         "quantite_vendue": rng.choice([1, 2, 3], m, p=[0.85, 0.12, 0.03]),
-        "prix_unitaire": prix.round(2),
-        "remise": remise,
+        "prix_unitaire": (np.array([p[3] for p in PRODUITS])[pidx] * indice_prix[gidx][i]).round(2),
+        "remise": np.where(rng.random(m) < proba_remise, rng.choice([0.10, 0.15, 0.20, 0.25, 0.30, 0.40], m), 0.0),
     })
-    return cmd, lignes
 
 
-def calculer_montants(lignes, produits, rng):
+def montants(f):
     # Coût de revient : environ 55 % du prix catalogue (marge brute de Nike autour de 43-45 %)
-    cout = lignes["produit_id"].map(dict(zip(produits["produit_id"], produits["prix_catalogue"] * 0.55)))
-    lignes["chiffre_affaires"] = (lignes["quantite_vendue"] * lignes["prix_unitaire"] * (1 - lignes["remise"])).round(2)
-    lignes["benefices"] = (lignes["chiffre_affaires"] - lignes["quantite_vendue"] * cout).round(2)
-    return lignes
+    cout = f["produit_id"].map({p[0]: p[3] * 0.55 for p in PRODUITS})
+    f["chiffre_affaires"] = (f["quantite_vendue"] * f["prix_unitaire"] * (1 - f["remise"])).round(2)
+    f["benefices"] = (f["chiffre_affaires"] - f["quantite_vendue"] * cout).round(2)
+    return f
 
 
 def main():
@@ -179,37 +266,50 @@ def main():
     ap.add_argument("--source", default="source_kaggle", help="dossier des données Kaggle nettoyées")
     ap.add_argument("--out", default="data")
     ap.add_argument("--commandes", type=int, default=100_000, help="nombre de commandes ajoutées")
+    ap.add_argument("--clients", type=int, default=None, help="défaut : commandes / 4")
     ap.add_argument("--lot", type=int, default=500_000)
     ap.add_argument("--seed", type=int, default=42)
     a = ap.parse_args()
 
     rng = np.random.default_rng(a.seed)
     os.makedirs(a.out, exist_ok=True)
-    zones, pays, regions, univers, categories, produits = referentiels()
-    for nom, df in [("zones", zones), ("pays", pays), ("regions", regions), ("univers", univers),
-                    ("categories_produits", categories), ("produits", produits)]:
+    geo, produits, dates = dim_geographie(), dim_produit(), dim_date()
+    clients = dim_client(a.clients or max(5_000, a.commandes // 4), geo, rng)
+    for nom, df in [("dim_geographie", geo), ("dim_produit", produits), ("dim_date", dates),
+                    ("categories", table_categories())]:
         df.to_csv(os.path.join(a.out, f"{nom}.csv"), index=False)
 
-    c, l = source_kaggle(a.source, regions, produits, rng)
-    pc, pl = os.path.join(a.out, "commandes.csv"), os.path.join(a.out, "lignes_commande.csv")
-    c.to_csv(pc, index=False)
-    calculer_montants(l, produits, rng).to_csv(pl, index=False)
-    n_cmd, n_lig = len(c), len(l)
+    chemin = os.path.join(a.out, "fait_ventes.csv")
+    premiere = np.full(len(clients) + 1, 99999999, dtype=np.int64)  # 1re commande de chaque client (AAAAMMJJ)
 
+    def ecrire(f, debut_id, entete):
+        f = montants(f)
+        f.insert(0, "vente_id", np.arange(debut_id, debut_id + len(f)))
+        np.minimum.at(premiere, f["client_id"].to_numpy(), f["date_id"].to_numpy())
+        f.to_csv(chemin, mode="w" if entete else "a", header=entete, index=False)
+        return len(f)
+
+    nb_ventes = ecrire(ventes_kaggle(a.source, geo, clients, rng), 1, True)
+    prochaine_cmd = 2501
     fait = 0
     while fait < a.commandes:
         k = min(a.lot, a.commandes - fait)
-        sc, sl = generer(n_cmd + 1, n_lig + 1, k, regions, produits, rng)
-        sc.to_csv(pc, mode="a", header=False, index=False)
-        calculer_montants(sl, produits, rng).to_csv(pl, mode="a", header=False, index=False)
-        n_cmd += len(sc)
-        n_lig += len(sl)
+        nb_ventes += ecrire(ventes_synthetiques(prochaine_cmd, k, geo, clients, rng), nb_ventes + 1, False)
+        prochaine_cmd += k
         fait += k
 
-    for nom, n in [("zones", len(zones)), ("pays", len(pays)), ("regions", len(regions)), ("univers", len(univers)),
-                   ("categories_produits", len(categories)), ("produits", len(produits)),
-                   ("commandes", n_cmd), ("lignes_commande", n_lig)]:
-        print(f"{nom:<20} {n:>12,}")
+    # Un client s'inscrit au plus tard le jour de sa 1re commande
+    p = premiere[clients["client_id"].to_numpy()]
+    first = pd.to_datetime(np.where(p < 99999999, p, 0).astype(str), format="%Y%m%d", errors="coerce")
+    clients["date_inscription"] = np.where(first.notna() & (first < clients["date_inscription"]),
+                                           first, clients["date_inscription"])
+    clients["date_inscription"] = pd.to_datetime(clients["date_inscription"]).dt.date
+    clients.drop(columns=["_geo", "_w"]).to_csv(os.path.join(a.out, "dim_client.csv"), index=False)
+
+    for nom, n in [("fait_ventes", nb_ventes), ("dim_date", len(dates)), ("dim_client", len(clients)),
+                   ("dim_produit", len(produits)), ("dim_geographie", len(geo)),
+                   ("categories", len(table_categories()))]:
+        print(f"{nom:<16} {n:>12,}")
 
 
 if __name__ == "__main__":
