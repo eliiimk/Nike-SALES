@@ -1,15 +1,3 @@
-<<<<<<< HEAD
--- Evolution des quantités achetées par client
-SELECT
-    client_id,
-    date_id,
-    quantite_vendue,
-    LAG(quantite_vendue) OVER (
-        PARTITION BY client_id
-        ORDER BY date_id
-    ) AS quantite_precedente
-FROM fait_ventes;
-=======
 SELECT g.ville,
        g.pays,
        COUNT(DISTINCT f.commande_id) AS nb_commandes,
@@ -155,7 +143,6 @@ SELECT chemin, profondeur
 FROM arbre
 ORDER BY chemin;
 
-
 WITH RECURSIVE arbre AS (
     SELECT produit_id, nom, niveau, nom::text AS chemin
     FROM dim_produit
@@ -171,55 +158,50 @@ JOIN fait_ventes f ON f.produit_id = a.produit_id
 WHERE a.niveau = 'Produit'
 GROUP BY a.chemin
 ORDER BY ca DESC;
->>>>>>> origin/blanche-eli
 
--- Pays ayant connu la plus forte croissance de chiffre d'affaires
--- entre le S1 2024 et le S1 2025 dans chaque zone
 WITH ventes_semestre AS (
     SELECT g.zone, g.pays, d.annee, f.chiffre_affaires
     FROM fait_ventes f
-    JOIN dim_date d       ON d.date_id = f.date_id
+    JOIN dim_date d       ON d.date_id       = f.date_id
     JOIN dim_geographie g ON g.geographie_id = f.geographie_id
     WHERE d.mois BETWEEN 1 AND 6
       AND d.annee IN (2024, 2025)
 ),
 ca_pays AS (
-    SELECT zone,
-           pays,
+    SELECT zone, pays,
            SUM(CASE WHEN annee = 2024 THEN chiffre_affaires ELSE 0 END) AS ca_2024,
            SUM(CASE WHEN annee = 2025 THEN chiffre_affaires ELSE 0 END) AS ca_2025
     FROM ventes_semestre
     GROUP BY zone, pays
 ),
 evolution AS (
-    SELECT *,
-           ROUND(100.0 * (ca_2025 - ca_2024) / NULLIF(ca_2024,0), 1) AS evolution_pct
+    SELECT *, ROUND(100 * (ca_2025 - ca_2024) / ca_2024, 1) AS evolution_pct
     FROM ca_pays
 ),
 classement AS (
-    SELECT *,
-           RANK() OVER (
-               PARTITION BY zone
-               ORDER BY evolution_pct DESC
-           ) AS rang
+    SELECT *, RANK() OVER (PARTITION BY zone ORDER BY evolution_pct DESC) AS rang
     FROM evolution
 )
 SELECT zone, pays, ca_2024, ca_2025, evolution_pct
 FROM classement
 WHERE rang = 1
-<<<<<<< HEAD
 ORDER BY zone;
-=======
-ORDER BY zone;
-=======
 
--- Top 3 des produits par catégorie selon le chiffre d'affaires
+SELECT
+    client_id,
+    date_id,
+    quantite_vendue,
+    LAG(quantite_vendue) OVER (
+        PARTITION BY client_id
+        ORDER BY date_id
+    ) AS quantite_precedente
+FROM fait_ventes;
 
 WITH ca_par_produit AS (
     SELECT
         dp.categorie,
         dp.produit_id,
-        dp.nom_produit,
+        dp.nom,
         SUM(fv.chiffre_affaires) AS ca_total
     FROM fait_ventes fv
     JOIN dim_produit dp
@@ -227,13 +209,13 @@ WITH ca_par_produit AS (
     GROUP BY
         dp.categorie,
         dp.produit_id,
-        dp.nom_produit
+        dp.nom
 ),
 classement_produits AS (
     SELECT
         categorie,
         produit_id,
-        nom_produit,
+        nom,
         ca_total,
         ROW_NUMBER() OVER (
             PARTITION BY categorie
@@ -244,44 +226,39 @@ classement_produits AS (
 SELECT
     categorie,
     rang,
-    nom_produit,
+    nom,
     ca_total
 FROM classement_produits
 WHERE rang <= 3
 ORDER BY categorie, rang;
 
-
--- Afficher le chemin complet de chaque catégorie
-
 WITH RECURSIVE chemin_categories AS (
-    -- Cas de base : catégories racines
     SELECT
-        c.categorie_id,
-        c.nom_categorie,
-        c.categorie_parent_id,
-        c.niveau,
-        c.nom_categorie::TEXT AS chemin_complet
-    FROM categories c
-    WHERE c.categorie_parent_id IS NULL
+        p.produit_id,
+        p.nom,
+        p.parent_id,
+        p.niveau,
+        p.nom::TEXT AS chemin_complet
+    FROM dim_produit p
+    WHERE p.parent_id IS NULL
 
     UNION ALL
 
-    -- Récursion : sous-catégories rattachées à leur parent
     SELECT
-        c.categorie_id,
-        c.nom_categorie,
-        c.categorie_parent_id,
-        c.niveau,
-        (cc.chemin_complet || ' > ' || c.nom_categorie)::TEXT AS chemin_complet
-    FROM categories c
+        p.produit_id,
+        p.nom,
+        p.parent_id,
+        p.niveau,
+        (cc.chemin_complet || ' > ' || p.nom)::TEXT AS chemin_complet
+    FROM dim_produit p
     JOIN chemin_categories cc
-        ON c.categorie_parent_id = cc.categorie_id
+        ON p.parent_id = cc.produit_id
 )
 SELECT
-    categorie_id,
-    nom_categorie,
+    produit_id,
+    nom,
     niveau,
     chemin_complet
 FROM chemin_categories
+WHERE niveau <> 'Produit'
 ORDER BY chemin_complet;
->>>>>>> origin/blanche-eli
