@@ -143,6 +143,7 @@ SELECT chemin, profondeur
 FROM arbre
 ORDER BY chemin;
 
+
 WITH RECURSIVE arbre AS (
     SELECT produit_id, nom, niveau, nom::text AS chemin
     FROM dim_produit
@@ -186,3 +187,77 @@ SELECT zone, pays, ca_2024, ca_2025, evolution_pct
 FROM classement
 WHERE rang = 1
 ORDER BY zone;
+=======
+
+-- Top 3 des produits par catégorie selon le chiffre d'affaires
+
+WITH ca_par_produit AS (
+    SELECT
+        dp.categorie,
+        dp.produit_id,
+        dp.nom_produit,
+        SUM(fv.chiffre_affaires) AS ca_total
+    FROM fait_ventes fv
+    JOIN dim_produit dp
+        ON dp.produit_id = fv.produit_id
+    GROUP BY
+        dp.categorie,
+        dp.produit_id,
+        dp.nom_produit
+),
+classement_produits AS (
+    SELECT
+        categorie,
+        produit_id,
+        nom_produit,
+        ca_total,
+        ROW_NUMBER() OVER (
+            PARTITION BY categorie
+            ORDER BY ca_total DESC
+        ) AS rang
+    FROM ca_par_produit
+)
+SELECT
+    categorie,
+    rang,
+    nom_produit,
+    ca_total
+FROM classement_produits
+WHERE rang <= 3
+ORDER BY categorie, rang;
+
+
+-- Afficher le chemin complet de chaque catégorie
+
+WITH RECURSIVE chemin_categories AS (
+    -- Cas de base : catégories racines
+    SELECT
+        c.categorie_id,
+        c.nom_categorie,
+        c.categorie_parent_id,
+        c.niveau,
+        c.nom_categorie::TEXT AS chemin_complet
+    FROM categories c
+    WHERE c.categorie_parent_id IS NULL
+
+    UNION ALL
+
+    -- Récursion : sous-catégories rattachées à leur parent
+    SELECT
+        c.categorie_id,
+        c.nom_categorie,
+        c.categorie_parent_id,
+        c.niveau,
+        (cc.chemin_complet || ' > ' || c.nom_categorie)::TEXT AS chemin_complet
+    FROM categories c
+    JOIN chemin_categories cc
+        ON c.categorie_parent_id = cc.categorie_id
+)
+SELECT
+    categorie_id,
+    nom_categorie,
+    niveau,
+    chemin_complet
+FROM chemin_categories
+ORDER BY chemin_complet;
+
