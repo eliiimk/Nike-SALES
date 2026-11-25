@@ -1,13 +1,7 @@
--- Projet fil rouge - Ventes Nike (PostgreSQL)
--- Schéma en étoile : fait_ventes au centre, 4 dimensions autour.
--- Montants en dollars (USD).
--- Lancer depuis la racine du dépôt : psql -d nike -f sql/creation_tables.sql
+DROP TABLE IF EXISTS fait_ventes, dim_date, dim_client, dim_produit, dim_geographie;
 
-DROP TABLE IF EXISTS fait_ventes, dim_date, dim_client, dim_produit, dim_geographie, categories;
-
--- Dimension temps
 CREATE TABLE dim_date (
-    date_id       INTEGER PRIMARY KEY,          -- format AAAAMMJJ
+    date_id       INTEGER PRIMARY KEY,
     date_complete DATE NOT NULL UNIQUE,
     annee         SMALLINT NOT NULL,
     trimestre     SMALLINT NOT NULL CHECK (trimestre BETWEEN 1 AND 4),
@@ -19,7 +13,6 @@ CREATE TABLE dim_date (
     est_weekend   BOOLEAN NOT NULL
 );
 
--- Dimension clients
 CREATE TABLE dim_client (
     client_id        INTEGER PRIMARY KEY,
     sexe             CHAR(1) NOT NULL CHECK (sexe IN ('H', 'F')),
@@ -30,8 +23,6 @@ CREATE TABLE dim_client (
     date_inscription DATE NOT NULL
 );
 
--- Dimension produits, avec la hiérarchie du catalogue : Nike > univers > catégorie > produit
--- Chaque ligne pointe vers son parent (parent_id). Les ventes ne concernent que les lignes de niveau 'Produit'.
 CREATE TABLE dim_produit (
     produit_id     INTEGER PRIMARY KEY,
     nom            VARCHAR(100) NOT NULL UNIQUE,
@@ -42,7 +33,6 @@ CREATE TABLE dim_produit (
     prix_catalogue NUMERIC(10, 2) CHECK (prix_catalogue > 0)
 );
 
--- Dimension géographie (ville, pays et zone regroupés dans la même table)
 CREATE TABLE dim_geographie (
     geographie_id INTEGER PRIMARY KEY,
     ville         VARCHAR(50) NOT NULL UNIQUE,
@@ -50,11 +40,10 @@ CREATE TABLE dim_geographie (
     zone          VARCHAR(50) NOT NULL
 );
 
--- Table de faits : une ligne = un produit vendu dans une commande
 CREATE TABLE fait_ventes (
     vente_id         INTEGER PRIMARY KEY,
     commande_id      INTEGER NOT NULL,
-    order_id_source  INTEGER,                    -- renseigné pour les commandes du fichier Kaggle
+    order_id_source  INTEGER,
     date_id          INTEGER NOT NULL REFERENCES dim_date (date_id),
     client_id        INTEGER NOT NULL REFERENCES dim_client (client_id),
     produit_id       INTEGER NOT NULL REFERENCES dim_produit (produit_id),
