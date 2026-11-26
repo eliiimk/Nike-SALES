@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: nike
+    schema: public
+    description: "Tables du projet Nike Sales chargées dans PostgreSQL"
+    tables:
+      - name: fait_ventes
+        description: "Une ligne par vente"
+        columns:
+          - name: vente_id
+            tests: [unique, not_null]
+      - name: dim_client
+        description: "Un client par ligne"
+        columns:
+          - name: client_id
+            tests: [unique, not_null]
+      - name: dim_date
+        description: "Un jour par ligne"
+        columns:
+          - name: date_id
+            tests: [unique, not_null]
+      - name: dim_geographie
+        description: "Une ville par ligne"
+        columns:
+          - name: geographie_id
+            tests: [unique, not_null]
+      - name: dim_produit
+        description: "Un élément de la hiérarchie produit par ligne (marque, univers, catégorie, produit)"
+        columns:
+          - name: produit_id
+            tests: [unique, not_null]
