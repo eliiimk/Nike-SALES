@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: stg_nike__fait_ventes
+    description: "Ventes nettoyées. Une ligne = un produit vendu dans une commande."
+    columns:
+      - name: vente_id
+        data_tests: [unique, not_null]
+      - name: commande_id
+        data_tests: [not_null]
+      - name: canal_vente
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Online', 'Retail']
+      - name: genre_cible
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Men', 'Women', 'Kids']
+      - name: quantite_vendue
+        data_tests: [not_null]
+      - name: chiffre_affaires
+        data_tests: [not_null]
+
+  - name: stg_nike__dim_client
+    description: "Clients nettoyés. Une ligne = un client."
+    columns:
+      - name: client_id
+        data_tests: [unique, not_null]
+      - name: sexe
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['H', 'F']
+
+  - name: stg_nike__dim_date
+    description: "Calendrier. Une ligne = un jour."
+    columns:
+      - name: date_id
+        data_tests: [unique, not_null]
+      - name: date_complete
+        data_tests: [unique, not_null]
+
+  - name: stg_nike__dim_geographie
+    description: "Villes de vente. Une ligne = une ville."
+    columns:
+      - name: geographie_id
+        data_tests: [unique, not_null]
+      - name: ville
+        data_tests: [unique, not_null]
+
+  - name: stg_nike__dim_produit
+    description: "Hiérarchie produit : marque, univers, catégorie, produit. Le lien se fait par parent_id."
+    columns:
+      - name: produit_id
+        data_tests: [unique, not_null]
+      - name: niveau
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Marque', 'Univers', 'Catégorie', 'Produit']
+      - name: parent_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_nike__dim_produit')
+                field: produit_id
