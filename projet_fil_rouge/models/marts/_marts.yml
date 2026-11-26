@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: fct_ventes
+    description: "Table de faits des ventes. Grain : une ligne = un produit vendu dans une commande."
+    columns:
+      - name: vente_id
+        description: "Clé de la vente"
+        data_tests: [unique, not_null]
+      - name: date_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_id
+      - name: client_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_client')
+                field: client_id
+      - name: produit_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_produit')
+                field: produit_id
+      - name: geographie_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_geographie')
+                field: geographie_id
+      - name: canal_vente
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Online', 'Retail']
+      - name: genre_cible
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Men', 'Women', 'Kids']
+      - name: prix_unitaire
+        description: "Prix payé pour une unité, avant remise"
+      - name: remise
+        description: "Remise appliquée, entre 0 et 1"
+      - name: chiffre_affaires
+        description: "Montant de la vente : quantite_vendue × prix_unitaire × (1 − remise)"
+
+  - name: dim_client
+    description: "Dimension client. Une ligne = un client."
+    columns:
+      - name: client_id
+        data_tests: [unique, not_null]
+
+  - name: dim_produit
+    description: "Dimension produit. Une ligne = un produit. La hiérarchie (univers, catégorie) est aplatie en colonnes."
+    columns:
+      - name: produit_id
+        data_tests: [unique, not_null]
+      - name: categorie
+        data_tests: [not_null]
+      - name: prix_catalogue
+        description: "Prix du produit dans le catalogue, différent du montant de la vente"
+
+  - name: dim_date
+    description: "Dimension date. Une ligne = un jour."
+    columns:
+      - name: date_id
+        data_tests: [unique, not_null]
+
+  - name: dim_geographie
+    description: "Dimension géographie. Une ligne = une ville."
+    columns:
+      - name: geographie_id
+        data_tests: [unique, not_null]
