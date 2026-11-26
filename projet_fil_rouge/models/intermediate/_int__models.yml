@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: int_ventes_enrichies
+    description: "Ventes enrichies avec les attributs produit, date, géographie et client."
+    columns:
+      - name: vente_id
+        tests:
+          - unique
+          - not_null
+      - name: chiffre_affaires
+        tests:
+          - not_null
+
+  - name: int_ca_mensuel_online
+    description: "Chiffre d'affaires mensuel par produit et catégorie sur le canal Online."
+    columns:
+      - name: annee
+        tests:
+          - not_null
+      - name: nom
+        tests:
+          - not_null

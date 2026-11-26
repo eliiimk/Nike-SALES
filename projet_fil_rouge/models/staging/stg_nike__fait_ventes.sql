@@ -7,7 +7,7 @@ SELECT
     geographie_id,
     TRIM(canal_vente) AS canal_vente,
     TRIM(genre_cible) AS genre_cible,
-    TRIM(taille) AS taille,
+    TRIM(CAST(taille AS VARCHAR)) AS taille,
     quantite_vendue,
     prix_unitaire,
     remise,
