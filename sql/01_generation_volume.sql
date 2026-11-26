@@ -1,3 +1,4 @@
+-- On copie les clients 67 fois pour avoir de nouveaux clients
 INSERT INTO dim_client (client_id, sexe, tranche_age, ville_residence, pays_residence,
                         membre_nike, date_inscription)
 SELECT c.client_id + k * 100000,
@@ -11,6 +12,8 @@ FROM dim_client c
 CROSS JOIN generate_series(1, 67) AS k
 WHERE c.client_id < 100000;
 
+-- On copie les ventes 67 fois en décalant un peu les dates, les quantités et les remises
+-- Le CA est recalculé : quantité x prix unitaire x (1 - remise)
 INSERT INTO fait_ventes (vente_id, commande_id, order_id_source, date_id, client_id, produit_id,
                          geographie_id, canal_vente, genre_cible, taille, quantite_vendue,
                          prix_unitaire, remise, chiffre_affaires, benefices)
@@ -53,6 +56,7 @@ SELECT vente_id,
        ROUND(quantite_vendue * prix_unitaire * (1 - remise) - quantite_vendue * prix_catalogue * 0.55, 2)
 FROM copies;
 
+-- On met à jour les statistiques puis on vérifie le nombre de lignes
 ANALYZE;
 
 SELECT 'fait_ventes' AS table_name, COUNT(*) AS nb_lignes FROM fait_ventes
